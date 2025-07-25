@@ -18,5 +18,6 @@ func AuthRoutes(r *gin.Engine) {
 	auth.POST("/register",middleware.PasswordStrength(),middleware.CreateRateLimiterMiddleware("20-M"), handlers.Register)
 	auth.POST("/login",middleware.CreateRateLimiterMiddleware("5-M"), handlers.Login)
 	auth.POST(":id/profile-image",middleware.JWTAuthMiddleware(),handlers.UploadUserProfile)
-
+	auth.GET("/location/:agentID/:parcelID",handlers.UpdateDriverLocation)
+	
 }

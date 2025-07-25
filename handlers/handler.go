@@ -7,6 +7,7 @@ import (
 	"go_pickup/cloudinary"
 	"go_pickup/config"
 	"go_pickup/email"
+	"go_pickup/kafka"
 	"go_pickup/models"
 	"go_pickup/partner"
 	"go_pickup/twilio"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gin-gonic/gin"
@@ -647,4 +649,45 @@ func Login(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+func UpdateDriverLocation(c *gin.Context) {
+    var loc models.LocationUpdate
+    if err := c.ShouldBindJSON(&loc); err != nil {
+        c.JSON(400, gin.H{"error": "invalid payload"})
+        return
+    }
+
+    producer, err := kafka.NewProducer(kafka.ProducerConfig{
+        Brokers:      []string{"localhost:9092"},
+        Topic:        "location-updates",
+        BatchSize:    10,
+        BatchTimeout: 100 * time.Millisecond,
+    })
+    if err != nil {
+        c.JSON(500, gin.H{"error": "producer init failed"})
+        return
+    }
+    defer producer.Close()
+
+    if err := producer.SendLocationUpdate(c, loc); err != nil {
+        c.JSON(500, gin.H{"error": "send failed"})
+        return
+    }
+
+    c.JSON(200, gin.H{"message": "location sent"})
+}
+func GetDriverLocation(c *gin.Context) {
+    agentID := c.Param("agentID")
+    parcelID := c.Param("parcelID")
+
+    rdb := redis.NewClient(&redis.Options{Addr: "redis:6379"})
+    key := fmt.Sprintf("location:%s:%s", agentID, parcelID)
+    val, err := rdb.Get(context.Background(), key).Result()
+    if err != nil {
+        c.JSON(404, gin.H{"error": "location not found"})
+        return
+    }
+
+    c.Data(200, "application/json", []byte(val))
 }

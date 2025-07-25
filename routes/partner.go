@@ -10,7 +10,7 @@ import (
 
         func DeliveryPartnerRoute(c *gin.Engine){
 AgentAuth:=c.Group("/partner")
-AgentAuth.POST("/send-location",)
+AgentAuth.POST("/update-location",handlers.UpdateDriverLocation)
 AgentAuth.POST("/register",middleware.PasswordStrength(),middleware.CreateRateLimiterMiddleware("5-M"), middleware.LicenseVerification(), handlers.DeliveryPartnerRegistration)
 AgentAuth.POST("/Parcel/status",middleware.JWTAuthMiddleware(),handlers.UpdateParcelStatusByAgent)
 AgentAuth.POST("/login",middleware.CreateRateLimiterMiddleware("5-M"),handlers.DeliveryPartnerLogin)

@@ -1,83 +1,56 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"go_pickup/models"
-	"log"
-	"math/rand"
-	"net/http"
-	"os"
-	"os/signal"
-	"strconv"
-	"syscall"
-	"time"
-    "go.mongodb.org/mongo-driver/bson/primitive"
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "math/rand"
+    "net/http"
+    "time"
 )
 
-// Generates a random float64 between min and max
-func randomFloat(min, max float64) float64 {
-	return min + rand.Float64()*(max-min)
+type LocationUpdate struct {
+    ID        string    `json:"ID"`
+    ParcelID  string    `json:"ParcelID"`
+    Latitude  float64   `json:"Latitude"`
+    Longitude float64   `json:"Longitude"`
+    Status    string    `json:"Status"`
+    Timestamp time.Time `json:"Timestamp"`
 }
 
 func main() {
-	//rand.Seed(time.Now().UnixNano())
+    apiURL := "http://localhost:8070/partner/update-location"
 
-	agentID := "AGENT_SIM_" + strconv.Itoa(rand.Intn(1000))
-	parcelID := "PARCEL_SIM_" + strconv.Itoa(rand.Intn(1000))
+    agentID := "64b8a1f0a3d2f1e2b4567890"
+    parcelID := "parcel123"
 
-	// Mumbai region bounds
-	latMin, latMax := 19.00, 19.30
-	lngMin, lngMax := 72.80, 73.00
+    // Starting point (example: New Delhi)
+    lat := 28.6139
+    lng := 77.2090
 
-	// Handle graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+    for {
+        // Simulate slight movement
+        lat += rand.Float64()*0.001 - 0.0005
+        lng += rand.Float64()*0.001 - 0.0005
 
-	log.Printf("🚚 Simulator started for agent %s, parcel %s", agentID, parcelID)
+        update := LocationUpdate{
+            ID:        agentID,
+            ParcelID:  parcelID,
+            Latitude:  lat,
+            Longitude: lng,
+            Status:    "en route",
+            Timestamp: time.Now().UTC(),
+        }
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	apiURL := "http://localhost:8080/api/location" // Change if your API runs elsewhere
+        body, _ := json.Marshal(update)
+        resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(body))
+        if err != nil {
+            fmt.Println("Failed to send update:", err)
+        } else {
+            fmt.Printf("Sent: %+v, Status: %d\n", update, resp.StatusCode)
+            resp.Body.Close()
+        }
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				lat := randomFloat(latMin, latMax)
-				lng := randomFloat(lngMin, lngMax)
-				update := models.LocationUpdate{
-					ParcelID: primitive.ObjectID{},
-					Latitude:  lat,
-					Longitude: lng,
-					Timestamp: time.Now(),
-					Status:    "IN_TRANSIT",
-				}
-					
-					//Speed:     randomFloat(20, 40),
-
-				body, _ := json.Marshal(update)
-				req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(body))
-				req.Header.Set("Content-Type", "application/json")
-
-				resp, err := client.Do(req)
-				if err != nil {
-					log.Printf("❌ Failed to send: %v", err)
-				} else {
-					resp.Body.Close()
-					log.Printf("✅ Sent location: lat=%.5f, lng=%.5f", lat, lng)
-				}
-
-				time.Sleep(2 * time.Second)
-			}
-		}
-	}()
-
-	<-sigChan
-	log.Println("🛑 Simulator shutting down...")
-	cancel()
+        time.Sleep(5 * time.Second)
+    }
 }

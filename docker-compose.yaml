@@ -1,16 +1,70 @@
-version: '3'
+version: '3.8'
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
+    hostname: zookeeper # Added hostname for clarity
+    container_name: go_pickup-zookeeper-1 # Added container_name for easier management
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - pickup-net
 
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.4.3
+    hostname: kafka # Added hostname
+    container_name: go_pickup-kafka-1 # Added container_name
     ports:
+      # This maps the *internal* PLAINTEXT_HOST listener (port 9092)
+      # to your host's port 9092, which your Go app connects to.
       - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # Define two listener protocols:
+      # PLAINTEXT for internal Docker network (kafka:29092)
+      # PLAINTEXT_HOST for external access from host (localhost:9092)
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+
+      # Kafka needs to listen on these interfaces/ports within the container.
+      # 0.0.0.0 means listen on all available network interfaces.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+
+      # This is the crucial part: How Kafka tells clients where it can be reached.
+      # It advertises itself with two addresses:
+      # 1. For other Docker containers: kafka:29092
+      # 2. For clients on the host (like your Go app): localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1 # Recommended for single-broker
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1 # Recommended for single-broker
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0 # Helps consumer groups rebalance faster
+    depends_on:
+      - zookeeper
+    networks:
+      - pickup-net
+
+  redis:
+    image: redis:latest
+    hostname: redis # Added hostname
+    container_name: go_pickup-redis-1 # Added container_name
+    ports:
+      - "6379:6379"
+    networks:
+      - pickup-net
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    hostname: redisinsight # Added hostname
+    container_name: go_pickup-redisinsight-1 # Added container_name
+    ports:
+      - "8001:5540"
+    depends_on:
+      - redis
+    networks:
+      - pickup-net
+
+networks:
+  pickup-net:
+    driver: bridge
